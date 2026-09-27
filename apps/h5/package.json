@@ -1,0 +1,33 @@
+{
+  "name": "@interactive-story/h5",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc -b && vite build",
+    "build:static": "tsc -b && vite build --mode static",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run src --configLoader runner"
+  },
+  "dependencies": {
+    "@interactive-story/api-contracts": "*",
+    "@interactive-story/story-core": "*",
+    "@tailwindcss/vite": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "tailwindcss": "^4.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^26.1.0",
+    "vite": "^7.0.0"
+  }
+}

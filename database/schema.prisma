@@ -1,0 +1,546 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdminStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum EndUserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ChapterReleaseStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum UserChapterProgressStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum PrerequisitePurpose {
+  DISCOVERY
+  UNLOCK
+}
+
+enum PrerequisiteFactType {
+  CHAPTER_STARTED
+  NODE_DISCOVERED
+  NODE_COMPLETED
+  CHOICE_SELECTED
+}
+
+enum PrerequisiteSourceScope {
+  MAINLINE_ONLY
+  EXPLORATION_ONLY
+  ANY
+}
+
+enum UserExplorationRunMode {
+  EXPLORATION
+  REPLAY
+}
+
+enum UserExplorationRunStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum ContentStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+}
+
+enum VideoStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+  DISABLED
+}
+
+enum StoryNodeType {
+  VIDEO
+  CHOICE
+  ENDING
+}
+
+enum CompletionMode {
+  CHOICES
+  NEXT
+  END
+}
+
+enum AccessMode {
+  FREE
+  PAYMENT
+}
+
+enum AnalyticsEventType {
+  PAGE_VIEW
+  LANDING_CTA_CLICKED
+  NODE_ENTERED
+  VIDEO_COMPLETED
+  CHOICE_SELECTED
+  ENDING_COMPLETED
+  PAYMENT_CLICKED
+}
+
+model AdminUser {
+  id              String           @id @default(uuid()) @db.Uuid
+  email           String           @unique
+  passwordHash    String           @map("password_hash")
+  status          AdminStatus      @default(ACTIVE)
+  lastLoginAt     DateTime?        @map("last_login_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  releases        StoryRelease[]
+  chapterReleases ChapterRelease[]
+
+  @@map("admin_users")
+}
+
+model User {
+  id                String                @id @default(uuid()) @db.Uuid
+  authIssuer        String                @map("auth_issuer") @db.VarChar(512)
+  authSubject       String                @map("auth_subject") @db.VarChar(512)
+  email             String?               @db.VarChar(320)
+  status            EndUserStatus         @default(ACTIVE)
+  lastLoginAt       DateTime?             @map("last_login_at")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  chapterProgresses UserChapterProgress[]
+
+  @@unique([authIssuer, authSubject])
+  @@index([email])
+  @@map("users")
+}
+
+model Character {
+  id          String        @id @default(uuid()) @db.Uuid
+  code        String        @unique
+  name        String
+  avatarUrl   String?       @map("avatar_url")
+  coverUrl    String?       @map("cover_url")
+  description String?
+  status      ContentStatus @default(DRAFT)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  chapters    Chapter[]
+
+  @@map("characters")
+}
+
+model Story {
+  id          String        @id @default(uuid()) @db.Uuid
+  code        String        @unique
+  title       String
+  description String?
+  status      ContentStatus @default(DRAFT)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  chapters    Chapter[]
+
+  @@map("stories")
+}
+
+model Chapter {
+  id            String             @id @default(uuid()) @db.Uuid
+  code          String             @unique
+  title         String
+  description   String?
+  storyId       String             @map("story_id") @db.Uuid
+  characterId   String             @map("character_id") @db.Uuid
+  entryNodeId   String?            @map("entry_node_id") @db.Uuid
+  status        ContentStatus      @default(DRAFT)
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  story         Story              @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  character     Character          @relation(fields: [characterId], references: [id], onDelete: Restrict)
+  entryNode     Node?              @relation("ChapterEntryNode", fields: [entryNodeId], references: [id], onDelete: SetNull)
+  nodes         Node[]             @relation("ChapterNodes")
+  releases      ChapterRelease[]
+  paymentOffers TestPaymentOffer[]
+
+  @@index([storyId])
+  @@index([characterId])
+  @@map("chapters")
+}
+
+model VideoAsset {
+  id               String      @id @default(uuid()) @db.Uuid
+  code             String      @unique
+  originalFilename String      @map("original_filename")
+  objectKey        String      @unique @map("object_key")
+  playbackPath     String?     @map("playback_path")
+  posterPath       String?     @map("poster_path")
+  mimeType         String      @default("video/mp4") @map("mime_type")
+  fileSize         BigInt?     @map("file_size")
+  durationMs       Int?        @map("duration_ms")
+  width            Int?
+  height           Int?
+  checksum         String?
+  videoCodec       String?     @map("video_codec")
+  audioCodec       String?     @map("audio_codec")
+  pixelFormat      String?     @map("pixel_format")
+  frameRate        Float?      @map("frame_rate")
+  processingError  String?     @map("processing_error")
+  posterObjectKey  String?     @unique @map("poster_object_key")
+  posterMimeType   String?     @map("poster_mime_type")
+  posterFileSize   BigInt?     @map("poster_file_size")
+  status           VideoStatus @default(UPLOADING)
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  nodes            Node[]
+
+  @@map("video_assets")
+}
+
+model Node {
+  id               String             @id @default(uuid()) @db.Uuid
+  code             String
+  chapterId        String             @map("chapter_id") @db.Uuid
+  title            String
+  message          String?
+  videoAssetId     String?            @map("video_asset_id") @db.Uuid
+  nodeType         StoryNodeType      @default(VIDEO) @map("node_type")
+  completionMode   CompletionMode     @map("completion_mode")
+  nextNodeId       String?            @map("next_node_id") @db.Uuid
+  accessMode       AccessMode         @default(FREE) @map("access_mode")
+  accessKey        String?            @map("access_key")
+  status           ContentStatus      @default(DRAFT)
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  chapter          Chapter            @relation("ChapterNodes", fields: [chapterId], references: [id], onDelete: Cascade)
+  videoAsset       VideoAsset?        @relation(fields: [videoAssetId], references: [id], onDelete: SetNull)
+  nextNode         Node?              @relation("NextNode", fields: [nextNodeId], references: [id], onDelete: SetNull)
+  previousNodes    Node[]             @relation("NextNode")
+  entryForChapters Chapter[]          @relation("ChapterEntryNode")
+  outgoingChoices  Choice[]           @relation("ChoiceSource")
+  incomingChoices  Choice[]           @relation("ChoiceTarget")
+  paymentOffers    TestPaymentOffer[] @relation("PaymentOfferTriggerNode")
+
+  @@unique([chapterId, code])
+  @@index([videoAssetId])
+  @@index([nextNodeId])
+  @@map("story_nodes")
+}
+
+model Choice {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String
+  sourceNodeId String   @map("source_node_id") @db.Uuid
+  label        String
+  targetNodeId String   @map("target_node_id") @db.Uuid
+  sortOrder    Int      @map("sort_order")
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  sourceNode   Node     @relation("ChoiceSource", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNode   Node     @relation("ChoiceTarget", fields: [targetNodeId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceNodeId, code])
+  @@unique([sourceNodeId, sortOrder])
+  @@index([targetNodeId])
+  @@map("story_choices")
+}
+
+model StoryRelease {
+  id            String     @id @default(uuid()) @db.Uuid
+  version       Int        @unique
+  snapshot      Json       @map("snapshot_json")
+  isActive      Boolean    @default(false) @map("is_active")
+  publishedById String?    @map("published_by_id") @db.Uuid
+  publishedAt   DateTime   @default(now()) @map("published_at")
+  publishedBy   AdminUser? @relation(fields: [publishedById], references: [id], onDelete: SetNull)
+
+  @@index([isActive])
+  @@map("story_releases")
+}
+
+model ChapterRelease {
+  id                String                @id @default(uuid()) @db.Uuid
+  chapterId         String                @map("chapter_id") @db.Uuid
+  version           Int
+  status            ChapterReleaseStatus  @default(DRAFT)
+  snapshot          Json                  @map("snapshot_json")
+  contentHash       String                @map("content_hash") @db.Char(64)
+  publishedById     String?               @map("published_by_id") @db.Uuid
+  publishedAt       DateTime?             @map("published_at")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  chapter           Chapter               @relation(fields: [chapterId], references: [id], onDelete: Restrict)
+  publishedBy       AdminUser?            @relation(fields: [publishedById], references: [id], onDelete: SetNull)
+  chapterProgresses UserChapterProgress[]
+  storyMapRegions   StoryMapRegion[]
+
+  @@unique([chapterId, version])
+  @@index([chapterId, status])
+  @@index([publishedById])
+  @@map("chapter_releases")
+}
+
+model UserChapterProgress {
+  id                String                    @id @default(uuid()) @db.Uuid
+  userId            String                    @map("user_id") @db.Uuid
+  chapterReleaseId  String                    @map("chapter_release_id") @db.Uuid
+  status            UserChapterProgressStatus @default(IN_PROGRESS)
+  currentNodeCode   String                    @map("current_node_code") @db.VarChar(128)
+  canonicalSnapshot Json                      @map("canonical_snapshot_json")
+  progressVersion   Int                       @default(0) @map("progress_version")
+  startedAt         DateTime                  @default(now()) @map("started_at")
+  lastPlayedAt      DateTime                  @default(now()) @map("last_played_at")
+  completedAt       DateTime?                 @map("completed_at")
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
+  user              User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapterRelease    ChapterRelease            @relation(fields: [chapterReleaseId], references: [id], onDelete: Restrict)
+  nodeProgresses    UserNodeProgress[]
+  choiceDecisions   UserChoiceDecision[]
+  explorationRuns   UserExplorationRun[]
+
+  @@unique([userId, chapterReleaseId])
+  @@index([userId, status])
+  @@index([chapterReleaseId])
+  @@map("user_chapter_progress")
+}
+
+model StoryMapRegion {
+  id               String         @id @default(uuid()) @db.Uuid
+  chapterReleaseId String         @map("chapter_release_id") @db.Uuid
+  code             String         @db.VarChar(128)
+  title            String         @db.VarChar(255)
+  description      String?
+  sortOrder        Int            @map("sort_order")
+  layoutMetadata   Json?          @map("layout_metadata_json")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  chapterRelease   ChapterRelease @relation(fields: [chapterReleaseId], references: [id], onDelete: Cascade)
+  nodes            StoryMapNode[]
+
+  @@unique([chapterReleaseId, code])
+  @@unique([chapterReleaseId, sortOrder])
+  @@unique([id, chapterReleaseId])
+  @@map("story_map_regions")
+}
+
+model StoryMapNode {
+  id               String             @id @default(uuid()) @db.Uuid
+  chapterReleaseId String             @map("chapter_release_id") @db.Uuid
+  regionId         String             @map("region_id") @db.Uuid
+  nodeCode         String             @map("node_code") @db.VarChar(128)
+  displayTitle     String             @map("display_title") @db.VarChar(255)
+  description      String?
+  coverUrl         String?            @map("cover_url") @db.VarChar(2048)
+  positionX        Int                @map("position_x")
+  positionY        Int                @map("position_y")
+  sortOrder        Int                @map("sort_order")
+  allowExploration Boolean            @default(true) @map("allow_exploration")
+  allowReplay      Boolean            @default(true) @map("allow_replay")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  region           StoryMapRegion     @relation(fields: [regionId, chapterReleaseId], references: [id, chapterReleaseId], onDelete: Cascade)
+  prerequisites    NodePrerequisite[]
+
+  @@unique([chapterReleaseId, nodeCode])
+  @@unique([regionId, sortOrder])
+  @@index([chapterReleaseId, regionId])
+  @@map("story_map_nodes")
+}
+
+model NodePrerequisite {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  storyMapNodeId     String                      @map("story_map_node_id") @db.Uuid
+  purpose            PrerequisitePurpose
+  groupCode          String                      @map("group_code") @db.VarChar(128)
+  factType           PrerequisiteFactType        @map("fact_type")
+  requiredNodeCode   String?                     @map("required_node_code") @db.VarChar(128)
+  requiredChoiceCode String?                     @map("required_choice_code") @db.VarChar(128)
+  sourceScope        PrerequisiteSourceScope     @map("source_scope")
+  sortOrder          Int                         @map("sort_order")
+  createdAt          DateTime                    @default(now()) @map("created_at")
+  updatedAt          DateTime                    @updatedAt @map("updated_at")
+  storyMapNode       StoryMapNode                @relation(fields: [storyMapNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([storyMapNodeId, purpose, groupCode, sortOrder])
+  @@index([storyMapNodeId, purpose])
+  @@map("node_prerequisites")
+}
+
+model UserExplorationRun {
+  id                String                   @id @default(uuid()) @db.Uuid
+  chapterProgressId String                   @map("chapter_progress_id") @db.Uuid
+  mode              UserExplorationRunMode
+  status            UserExplorationRunStatus @default(ACTIVE)
+  entryNodeCode     String                   @map("entry_node_code") @db.VarChar(128)
+  currentNodeCode   String                   @map("current_node_code") @db.VarChar(128)
+  canonicalSnapshot Json                     @map("canonical_snapshot_json")
+  runVersion        Int                      @default(0) @map("run_version")
+  startRequestKey   String                   @unique @map("start_request_key") @db.Uuid
+  startedAt         DateTime                 @default(now()) @map("started_at")
+  lastPlayedAt      DateTime                 @default(now()) @map("last_played_at")
+  completedAt       DateTime?                @map("completed_at")
+  abandonedAt       DateTime?                @map("abandoned_at")
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+  chapterProgress   UserChapterProgress      @relation(fields: [chapterProgressId], references: [id], onDelete: Cascade)
+  nodePlaySessions  UserNodePlaySession[]
+
+  @@index([chapterProgressId, status])
+  @@index([chapterProgressId, mode, startedAt])
+  @@map("user_exploration_runs")
+}
+
+model UserNodePlaySession {
+  id                   String                         @id @default(uuid()) @db.Uuid
+  explorationRunId     String                         @map("exploration_run_id") @db.Uuid
+  nodeCode             String                         @map("node_code") @db.VarChar(128)
+  sequence             Int
+  enteredAt            DateTime                       @default(now()) @map("entered_at")
+  completedAt          DateTime?                      @map("completed_at")
+  completionRequestKey String?                        @unique @map("completion_request_key") @db.Uuid
+  createdAt            DateTime                       @default(now()) @map("created_at")
+  updatedAt            DateTime                       @updatedAt @map("updated_at")
+  explorationRun       UserExplorationRun             @relation(fields: [explorationRunId], references: [id], onDelete: Cascade)
+  choiceDecision       UserExplorationChoiceDecision?
+
+  @@unique([explorationRunId, sequence])
+  @@unique([id, explorationRunId])
+  @@index([explorationRunId, nodeCode, completedAt])
+  @@map("user_node_play_sessions")
+}
+
+model UserExplorationChoiceDecision {
+  id                  String              @id @default(uuid()) @db.Uuid
+  explorationRunId    String              @map("exploration_run_id") @db.Uuid
+  sourcePlaySessionId String              @map("source_play_session_id") @db.Uuid
+  sequence            Int
+  sourceNodeCode      String              @map("source_node_code") @db.VarChar(128)
+  choiceCode          String              @map("choice_code") @db.VarChar(128)
+  targetNodeCode      String              @map("target_node_code") @db.VarChar(128)
+  requestKey          String              @unique @map("request_key") @db.Uuid
+  selectedAt          DateTime            @default(now()) @map("selected_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  sourcePlaySession   UserNodePlaySession @relation(fields: [sourcePlaySessionId, explorationRunId], references: [id, explorationRunId], onDelete: Cascade)
+
+  @@unique([sourcePlaySessionId, explorationRunId])
+  @@unique([explorationRunId, sequence])
+  @@index([explorationRunId, selectedAt])
+  @@map("user_exploration_choice_decisions")
+}
+
+model UserNodeProgress {
+  id                   String              @id @default(uuid()) @db.Uuid
+  chapterProgressId    String              @map("chapter_progress_id") @db.Uuid
+  nodeCode             String              @map("node_code") @db.VarChar(128)
+  discoveredAt         DateTime            @default(now()) @map("discovered_at")
+  availableAt          DateTime?           @map("available_at")
+  firstStartedAt       DateTime?           @map("first_started_at")
+  firstCompletedAt     DateTime?           @map("first_completed_at")
+  lastCompletedAt      DateTime?           @map("last_completed_at")
+  completionCount      Int                 @default(0) @map("completion_count")
+  lastPlayedAt         DateTime?           @map("last_played_at")
+  completionRequestKey String?             @unique @map("completion_request_key") @db.Uuid
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  chapterProgress      UserChapterProgress @relation(fields: [chapterProgressId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterProgressId, nodeCode])
+  @@map("user_node_progress")
+}
+
+model UserChoiceDecision {
+  id                String              @id @default(uuid()) @db.Uuid
+  chapterProgressId String              @map("chapter_progress_id") @db.Uuid
+  sourceNodeCode    String              @map("source_node_code") @db.VarChar(128)
+  choiceCode        String              @map("choice_code") @db.VarChar(128)
+  targetNodeCode    String              @map("target_node_code") @db.VarChar(128)
+  requestKey        String              @unique @map("request_key") @db.Uuid
+  selectedAt        DateTime            @default(now()) @map("selected_at")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  chapterProgress   UserChapterProgress @relation(fields: [chapterProgressId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterProgressId, sourceNodeCode])
+  @@index([chapterProgressId, selectedAt])
+  @@map("user_choice_decisions")
+}
+
+model AnalyticsSession {
+  id             String           @id @default(uuid()) @db.Uuid
+  sessionKey     String           @unique @map("session_key") @db.Uuid
+  firstEnteredAt DateTime         @default(now()) @map("first_entered_at")
+  lastSeenAt     DateTime         @default(now()) @map("last_seen_at")
+  endedAt        DateTime?        @map("ended_at")
+  durationMs     Int              @default(0) @map("duration_ms")
+  landingPath    String           @map("landing_path") @db.VarChar(2048)
+  referrer       String?          @db.VarChar(2048)
+  utmSource      String?          @map("utm_source") @db.VarChar(255)
+  utmMedium      String?          @map("utm_medium") @db.VarChar(255)
+  utmCampaign    String?          @map("utm_campaign") @db.VarChar(255)
+  utmContent     String?          @map("utm_content") @db.VarChar(255)
+  utmTerm        String?          @map("utm_term") @db.VarChar(255)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  events         AnalyticsEvent[]
+
+  @@index([firstEnteredAt])
+  @@index([utmSource])
+  @@map("analytics_sessions")
+}
+
+model AnalyticsEvent {
+  id             String             @id @default(uuid()) @db.Uuid
+  eventId        String             @unique @map("event_id") @db.Uuid
+  eventKey       String             @map("event_key") @db.VarChar(255)
+  sessionId      String             @map("session_id") @db.Uuid
+  eventType      AnalyticsEventType @map("event_type")
+  occurredAt     DateTime           @map("occurred_at")
+  receivedAt     DateTime           @default(now()) @map("received_at")
+  chapterCode    String?            @map("chapter_code") @db.VarChar(128)
+  nodeCode       String?            @map("node_code") @db.VarChar(128)
+  choiceCode     String?            @map("choice_code") @db.VarChar(128)
+  targetNodeCode String?            @map("target_node_code") @db.VarChar(128)
+  endingCode     String?            @map("ending_code") @db.VarChar(128)
+  offerCode      String?            @map("offer_code") @db.VarChar(128)
+  priceMinor     Int?               @map("price_minor")
+  currency       String?            @db.VarChar(3)
+  metadata       Json?
+  session        AnalyticsSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, eventKey])
+  @@index([eventType, occurredAt])
+  @@index([chapterCode, nodeCode])
+  @@index([sessionId, occurredAt])
+  @@map("analytics_events")
+}
+
+model TestPaymentOffer {
+  id            String        @id @default(uuid()) @db.Uuid
+  code          String        @unique @db.VarChar(128)
+  chapterId     String        @map("chapter_id") @db.Uuid
+  triggerNodeId String        @unique @map("trigger_node_id") @db.Uuid
+  title         String        @db.VarChar(255)
+  description   String?
+  buttonLabel   String        @map("button_label") @db.VarChar(255)
+  priceMinor    Int           @map("price_minor")
+  currency      String        @default("CNY") @db.VarChar(3)
+  status        ContentStatus @default(DRAFT)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  chapter       Chapter       @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  triggerNode   Node          @relation("PaymentOfferTriggerNode", fields: [triggerNodeId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId, status])
+  @@map("test_payment_offers")
+}

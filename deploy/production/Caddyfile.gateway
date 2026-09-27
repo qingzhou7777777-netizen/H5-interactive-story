@@ -1,0 +1,53 @@
+{
+  admin off
+  auto_https off
+}
+
+(security_headers) {
+  header {
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    X-Frame-Options "DENY"
+    Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    -Server
+  }
+}
+
+:{$GATEWAY_PORT:8080} {
+  import security_headers
+
+  @public_api host {$API_DOMAIN}
+  handle @public_api {
+    @admin_api path /v1/admin /v1/admin/*
+    respond @admin_api 404
+    reverse_proxy {$API_PRIVATE_ORIGIN:api:3000}
+  }
+
+  @admin_without_access {
+    host {$ADMIN_DOMAIN}
+    not header Cf-Access-Jwt-Assertion *
+  }
+  respond @admin_without_access 403
+
+  @admin_host host {$ADMIN_DOMAIN}
+  handle @admin_host {
+    @admin_api path /v1/admin /v1/admin/*
+    handle @admin_api {
+      reverse_proxy {$API_PRIVATE_ORIGIN:api:3000}
+    }
+
+    @other_api path /v1 /v1/*
+    respond @other_api 404
+
+    @immutable path /assets/*
+    header @immutable Cache-Control "private, max-age=31536000, immutable"
+
+    root * /srv/admin
+    try_files {path} /index.html
+    header /index.html Cache-Control "no-store"
+    file_server
+  }
+
+  respond 404
+  log
+}

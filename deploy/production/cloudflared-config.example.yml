@@ -1,0 +1,19 @@
+# This file is a reviewed template only. Do not put tunnel credentials here.
+# A separate staging copy must use staging hostnames and a staging Access audience.
+ingress:
+  - hostname: api.bt-ik.top
+    service: http://gateway:8080
+    originRequest:
+      httpHostHeader: api.bt-ik.top
+
+  - hostname: admin.bt-ik.top
+    service: http://gateway:8080
+    originRequest:
+      httpHostHeader: admin.bt-ik.top
+      access:
+        required: true
+        teamName: USER_CONFIRMATION_REQUIRED
+        audTag:
+          - USER_CONFIRMATION_REQUIRED
+
+  - service: http_status:404

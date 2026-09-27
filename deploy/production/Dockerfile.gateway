@@ -1,0 +1,28 @@
+FROM node:22-alpine AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/admin/package.json apps/admin/package.json
+COPY apps/h5/package.json apps/h5/package.json
+COPY packages/api-contracts/package.json packages/api-contracts/package.json
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/story-core/package.json packages/story-core/package.json
+RUN npm ci
+
+COPY tsconfig.base.json ./
+COPY apps/admin apps/admin
+COPY packages packages
+
+ARG ADMIN_API_BASE_URL
+RUN test -n "$ADMIN_API_BASE_URL" \
+  && npm run build --workspace @interactive-story/api-contracts \
+  && VITE_API_BASE_URL="$ADMIN_API_BASE_URL" npm run build --workspace @interactive-story/admin
+
+FROM caddy:2.10-alpine AS runtime
+
+COPY deploy/production/Caddyfile.gateway /etc/caddy/Caddyfile
+COPY --from=build /app/apps/admin/dist /srv/admin
+
+EXPOSE 8080

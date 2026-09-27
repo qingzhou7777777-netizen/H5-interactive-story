@@ -1,0 +1,2 @@
+ALTER TYPE "AnalyticsEventType" ADD VALUE 'PAGE_VIEW';
+ALTER TYPE "AnalyticsEventType" ADD VALUE 'LANDING_CTA_CLICKED';

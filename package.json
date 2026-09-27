@@ -1,0 +1,52 @@
+{
+  "name": "interactive-story",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:h5": "npm run dev --workspace @interactive-story/h5",
+    "dev:admin": "npm run dev --workspace @interactive-story/admin",
+    "dev:api": "npm run dev --workspace @interactive-story/api",
+    "build": "npm run build --workspaces --if-present && npm run db:build",
+    "verify:production-build": "node scripts/verify-production-build.mjs",
+    "verify:production-security": "node scripts/verify-production-security.mjs",
+    "verify:repository-hygiene": "node scripts/verify-repository-hygiene.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p database/tsconfig.json",
+    "test": "npm run test --workspaces --if-present",
+    "test:database": "vitest run database",
+    "db:generate": "prisma generate --schema database/schema.prisma",
+    "db:validate": "prisma validate --schema database/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema database/schema.prisma",
+    "db:build": "tsc -p database/tsconfig.build.json",
+    "db:seed": "npm run db:build && node database/dist/seed.js",
+    "db:seed:story-map": "npm run seed:story-map --workspace @interactive-story/api",
+    "init:migrate": "node scripts/production-init.mjs migrate",
+    "init:seed": "node scripts/production-init.mjs seed",
+    "init:release": "node scripts/production-init.mjs release chapter-01",
+    "init:story-map": "node scripts/production-init.mjs story-map"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prisma": "6.12.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.1"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "prisma@6.12.0": true,
+    "@prisma/engines@6.12.0": true,
+    "@prisma/client@6.12.0": true
+  },
+  "dependencies": {
+    "@prisma/client": "6.12.0"
+  }
+}

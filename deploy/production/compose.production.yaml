@@ -1,0 +1,85 @@
+name: interactive-story-private-production-shape
+
+x-init-service: &init-service
+  build:
+    context: ../..
+    dockerfile: deploy/production/Dockerfile.init
+  env_file: ${RUNTIME_ENV_FILE:-.env.production.example}
+  restart: "no"
+  profiles: ["initialization"]
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile.api
+    env_file: ${RUNTIME_ENV_FILE:-.env.production.example}
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+    expose:
+      - "3000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile.gateway
+      args:
+        ADMIN_API_BASE_URL: ${ADMIN_API_BASE_URL:?Set ADMIN_API_BASE_URL}
+    environment:
+      GATEWAY_PORT: 8080
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?Set ADMIN_DOMAIN}
+      API_PRIVATE_ORIGIN: api:3000
+    expose:
+      - "8080"
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+
+  cloudflared:
+    image: ${CLOUDFLARED_IMAGE:?Pin CLOUDFLARED_IMAGE before staging}
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Set TUNNEL_TOKEN in the secret store}
+    command:
+      - tunnel
+      - --config
+      - /etc/cloudflared/config.yml
+      - --no-autoupdate
+      - run
+    volumes:
+      - ./cloudflared-config.example.yml:/etc/cloudflared/config.yml:ro
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    depends_on:
+      gateway:
+        condition: service_started
+
+  init-migrate:
+    <<: *init-service
+    command: ["migrate"]
+
+  init-seed:
+    <<: *init-service
+    command: ["seed"]
+
+  init-release:
+    <<: *init-service
+    command: ["release", "chapter-01"]
+
+  init-story-map:
+    <<: *init-service
+    command: ["story-map"]
